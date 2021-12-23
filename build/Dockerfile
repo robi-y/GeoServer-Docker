@@ -2,10 +2,11 @@
 FROM tomcat:9.0-jre11-slim
 MAINTAINER thinkWhere<info@thinkwhere.com>
 # Credit: Tim Sutton<tim@linfiniti.com>
-# kartoza/docker-geoserver
+#llow-unauthenticatedi kartoza/docker-geoserver
 
-RUN apt-get -y update; apt-get -y install libapr1-dev \
-    libssl-dev wget zip curl xsltproc certbot cabextract
+RUN apt-get -y update; apt-get -y --allow-unauthenticated install libapr1-dev \
+    libssl-dev wget zip curl xsltproc certbot cabextract \
+    make g++ ant swig openjdk-11-jdk
 
 RUN set -e \
     export DEBIAN_FRONTEND=noninteractive \
@@ -21,10 +22,10 @@ RUN set -e \
 ENV JAVA_HOME=/usr/lib/jvm/default-java \
 	DEBIAN_FRONTEND=noninteractive \
     GEOSERVER_DATA_DIR=/opt/geoserver/data_dir \
-	GDAL_SKIP="ECW JP2ECW" \
 	GDAL_DATA=/usr/local/gdal-data \
-	LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/apr/lib:/usr/lib:/usr/lib/x86_64-linux-gnu"
+	LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib:/usr/local/apr/lib:/usr/lib:/usr/lib/x86_64-linux-gnu"
 
+#	GDAL_SKIP="ECW JP2ECW" \
 
 RUN mkdir -p ${GEOSERVER_DATA_DIR}
 
@@ -41,7 +42,7 @@ RUN if [ "$TOMCAT_EXTRAS" = false ]; then \
   fi;
 
 # ---------- GS_Version can be passed in as a parameter ------------
-ARG GS_VERSION=2.18.0
+ARG GS_VERSION=2.20.1
 
 # Add GDAL native libraries if the build-arg GDAL_NATIVE = true
 # EWC and JP2ECW are subjected to licence restrictions
@@ -95,6 +96,23 @@ RUN if ls /tmp/resources/fonts/*.ttf > /dev/null 2>&1; then \
 
 # Copy across script and XML stylesheet which will allow the Tomcat server.xml to be parameterised
 RUN cp /tmp/resources/tomcat/* $CATALINA_HOME/conf/
+
+# Copy ECW libs
+RUN cp /tmp/resources/ecw-release/* /usr/local/lib
+RUN mkdir -p /usr/local/hexagon && cp -r /tmp/resources/ecw5.4.0/* /usr/local/hexagon/
+RUN ldconfig /usr/local/lib && ldconfig /usr/local/hexagon
+
+# install gdal source
+RUN cd /tmp/resources/gdal-2.4.4 \
+	&& ./configure --with-ecw=/usr/local/hexagon --with-java=/usr/lib/jvm/default-java \
+        && make \
+        && make install \
+	&& cd swig/java \
+	&& make \
+	&& make install 
+
+RUN gdalinfo --formats | grep ECW
+
 
 # Delete resources after installation
 RUN rm -rf /tmp/resources
